@@ -1,5 +1,5 @@
 import { gameConfig as C } from './gameConfig';
-export type Field = { state: 'empty' | 'tilled' | 'ready'; readyWeek?: number };
+export type Field = { state: 'empty' | 'tilled' | 'ready'; readyWeek?: number; plantedWeek?: number };
 export type Report = { week: number; delivered: number; shortage: number; stock: number; harvest: number; logs: string[] };
 export type City = { name: string; stock: number; fields: Field[]; remaining: number; purchases: number; submitted: boolean; delivery: number; logs: string[]; harvest: number; reports: Report[] };
 export type Game = { version: 1; week: number; phase: 'lobby' | 'actions' | 'reveal' | 'final'; cities: City[] };
@@ -10,6 +10,7 @@ export function createGame(count: number, names: string[] = []): Game {
 }
 function requirePhase(g: Game, phase: Game['phase']) { if (g.phase !== phase) throw Error('目前階段無法執行此操作'); }
 export function start(g: Game): Game { requirePhase(g, 'lobby'); return { ...g, phase: 'actions' }; }
+export const canCare = (field: Field, week: number) => field.state === 'tilled' && field.plantedWeek !== undefined && week >= field.plantedWeek + C.careDelayWeeks;
 export function action(g: Game, index: number, kind: 'buy' | 'till' | 'care', fieldIndex?: number): Game {
   requirePhase(g, 'actions'); const n = structuredClone(g); const c = n.cities[index];
   if (!c || c.submitted || c.remaining <= 0) throw Error('沒有可用行動，或已經提交');
@@ -20,9 +21,11 @@ export function action(g: Game, index: number, kind: 'buy' | 'till' | 'care', fi
   } else {
     const f = c.fields[fieldIndex ?? -1];
     if (!f || (kind === 'till' ? f.state !== 'empty' : f.state !== 'tilled')) throw Error('田地狀態不允許此操作');
+    if (kind === 'care' && !canCare(f, g.week)) throw Error('本週播種的田地，最早下一週才能照料');
+    if (kind === 'till') f.plantedWeek = g.week;
     f.state = kind === 'till' ? 'tilled' : 'ready';
     if (kind === 'care') f.readyWeek = g.week + 1;
-    c.logs.push(`${kind === 'till' ? '開墾' : '照料'}${String.fromCharCode(65 + fieldIndex!)}田`);
+    c.logs.push(`${kind === 'till' ? '播種' : '照料'}${String.fromCharCode(65 + fieldIndex!)}田`);
   }
   c.remaining--; return n;
 }
@@ -42,7 +45,7 @@ export function advance(g: Game): Game {
   if (n.week === C.weeks) { n.phase = 'final'; return n; }
   n.week++; n.phase = 'actions';
   n.cities.forEach(c => {
-    c.harvest = 0; c.fields.forEach(f => { if (f.state === 'ready' && f.readyWeek! <= n.week) { c.harvest += C.harvestBoxes; f.state = 'empty'; delete f.readyWeek; } });
+    c.harvest = 0; c.fields.forEach(f => { if (f.state === 'ready' && f.readyWeek! <= n.week) { c.harvest += C.harvestBoxes; f.state = 'empty'; delete f.readyWeek; delete f.plantedWeek; } });
     c.stock += c.harvest; c.remaining = eventFor(n.week)?.actions ?? C.actions; c.purchases = 0; c.submitted = false; c.delivery = 0; c.logs = [];
   }); return n;
 }
