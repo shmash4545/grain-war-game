@@ -1,28 +1,591 @@
-import React, { useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import { gameConfig as C } from './gameConfig';
-import { type Game, createGame, start, action, submit, reveal, advance, monthTotal, eventFor, score, canCare } from './gameEngine';
-import './style.css';
-const KEY = 'grain-war-v1';
-function load(): Game | null { try { const g = JSON.parse(localStorage.getItem(KEY) || 'null'); if (g?.version === 1 && Array.isArray(g.cities)) for (const c of g.cities) if (Array.isArray(c.fields)) for (const f of c.fields) if (f.state === 'tilled' && f.plantedWeek === undefined) f.plantedWeek = g.week; return g?.version === 1 && Array.isArray(g.cities) && g.cities.length >= 2 && g.cities.every((c: any) => Array.isArray(c.fields) && Array.isArray(c.reports)) ? g : null; } catch { return null; } }
-function Village() { return <div className="village" aria-hidden="true"><div className="sun"/><div className="mountain m1"/><div className="mountain m2"/><div className="river"/><div className="land"/><div className="house h1"><i/></div><div className="house h2"><i/></div><div className="gate">禾</div><div className="tree t1"/><div className="tree t2"/><div className="tree t3"/><div className="mini-field f1"/><div className="mini-field f2"/><div className="mini-field f3"/></div>; }
-function App() {
- const [game, setGame] = useState<Game | null>(load), [page, setPage] = useState('home'), [count, setCount] = useState(2), [names, setNames] = useState([...C.cityNames]), [city, setCity] = useState(0), [boxes, setBoxes] = useState(6), [error, setError] = useState(''), [step, setStep] = useState(0);
- const save = (g: Game) => { setGame(g); try { localStorage.setItem(KEY, JSON.stringify(g)); setError(''); } catch { setError('瀏覽器無法存檔，請勿關閉此頁。'); } };
- const run = (fn: () => Game) => { try { save(fn()); } catch (e) { setError((e as Error).message); } };
- const nav = (p: string) => { setPage(p); setError(''); };
- const play = game && page === 'play'; const c = game?.cities[city]; const month = game ? Math.floor((game.week - 1) / 4) : 0;
- const lessons = [ ['八週，一座城的遠見', '全程八週，每四週一個月。每城起始 8 箱糧食、三塊完全相同的田。第一月目標 32 箱，第二月 44 箱。'], ['四次行動，如何選擇？', '每週通常有四次行動。採買消耗一次，立即取得兩箱，每週最多四次，與農務共用行動。空田播種、跨週照料各消耗一次行動。'], ['今天照料，下週收成', '照料完成的田在下一週週初自動收成七箱，並回到空地。播種後最早下一週才能照料。例如第一週播種、第二週照料、第三週收成。三塊田規則相同。'], ['交付與月度目標', '每週基本交付六箱，不消耗行動。可超額交付，所有正常交付計入當月目標。缺交不淘汰，測試版每缺一箱扣韌性一分，最低零分。'], ['提交、揭曉，再出發', '每城完成後提交並鎖定。所有城市提交後，由關主揭曉及手動推進。第 4、8 週顯示月結，第 8 週結算。'], ['事件與測試版計分', '第 3 週三次行動、第 6 週採買三箱、第 7 週五次行動。測試版分數：月目標 35、超額 25、庫存與產能 25、韌性 15。事件及公式尚待試玩校準。'] ];
- return <><header><a className="brand" href="#" onClick={e => { e.preventDefault(); nav('home'); }}><span className="seal">糧</span><span>糧戰 <small>雙城經營戰</small></span></a><nav><button className={page === 'home' ? 'nav-active' : ''} onClick={() => nav('home')}>首頁</button><button onClick={() => nav('rules')}>規則教學</button>{game && <button onClick={() => nav('play')}>返回遊戲</button>}<span className="badge">單機試玩版 · V1</span></nav></header>
- {error && <div className="error" role="alert">{error}<button onClick={() => setError('')}>關閉</button></div>}
- {page === 'home' && <main><section className="hero"><div><div className="eyebrow">八週經營 · 一城遠見</div><h1>一田一策，<br/>養出你的<span>盛世。</span></h1><p>在有限的糧食與行動之間，做出你的選擇。<br/>耕耘、交付、蓄勢，與友城共赴八週經營之戰。</p><div className="buttons"><button className="primary" onClick={() => nav('setup')}>開啟新戰局 <span>↗</span></button>{game ? <button onClick={() => nav('play')}>繼續上次遊戲 →</button> : <button onClick={() => nav('rules')}>了解遊戲規則 →</button>}</div><div className="hero-meta">2–6 座城市 <b>·</b> 8 週策略經營 <b>·</b> 同機輪流操作</div></div><div className="hero-art"><Village/><div className="art-label">青禾初立 <span>一切，從三塊田開始。</span></div></div></section><section className="features">{[['壹','耕耘長遠','三塊農田，同樣的起點。投資今天，收穫下一週。'],['貳','取捨當下','每週四次行動，交付與成長之間，每一步都有分量。'],['參','共見盛世','八週之後揭曉成果，從每一次決策看見城市的成長。']].map(a => <article key={a[0]}><span>{a[0]}</span><div><h3>{a[1]}</h3><p>{a[2]}</p></div></article>)}</section><div className="notice">本版為單機原型，城市共用一台裝置輪流操作。資料保存在此瀏覽器，尚未提供線上加入或多人同步。</div></main>}
- {page === 'rules' && <main className="narrow"><div className="eyebrow">遊戲指南 / {step + 1} OF {lessons.length}</div><h1 className="page-title">從一粒種子，讀懂經營。</h1><section className="panel tutorial"><span className="chapter">0{step + 1}</span><h2>{lessons[step][0]}</h2><p>{lessons[step][1]}</p><div className="dots">{lessons.map((_, i) => <button key={i} aria-label={`教學第 ${i+1} 步`} className={i === step ? 'selected' : ''} onClick={() => setStep(i)}>{i+1}</button>)}</div><div className="buttons"><button disabled={!step} onClick={() => setStep(step-1)}>上一步</button>{step < lessons.length-1 ? <button className="primary" onClick={() => setStep(step+1)}>下一步 →</button> : <button className="primary" onClick={() => nav('setup')}>開始建立戰局</button>}</div></section></main>}
- {page === 'setup' && <main className="narrow"><div className="eyebrow">關主設定</div><h1 className="page-title">邀幾座城，一同開局。</h1><section className="panel"><h2>參賽城市</h2><p>同一起點，各自選擇。所有城市在這台裝置輪流經營。</p><div className="counts">{[2,3,4,5,6].map(n => <button key={n} className={count === n ? 'selected' : ''} onClick={() => setCount(n)}>{n} 城</button>)}</div><div className="name-grid">{names.slice(0,count).map((name,i) => <label key={i}>{String.fromCharCode(65+i)} 城名稱<input maxLength={12} value={name} onChange={e => setNames(names.map((v,j) => j === i ? e.target.value : v))}/></label>)}</div><div className="notice">固定教學劇本 · 測試版配分<br/>起始 8 箱 / 三田 / 通常每週四次行動 / 每週交付六箱</div><button className="primary" onClick={() => { if (game && !confirm('建立新局將取代目前的本機存檔，確定繼續？')) return; save(createGame(count,names)); setCity(0); nav('play'); }}>建立戰局 →</button></section></main>}
- {play && game && <main><div className="game-heading"><div><div className="eyebrow">{game.phase === 'final' ? '八週復盤' : '雙城經營戰 / 同機輪流試玩'}</div><h1 className="page-title">{game.phase === 'lobby' ? '萬事俱備，待君啟程。' : game.phase === 'final' ? '八週耕耘，盛世初成。' : `第 ${game.week} 週 · ${game.phase === 'reveal' ? '本週揭曉' : '經營時刻'}`}</h1></div><span className="badge">{game.phase === 'final' ? '已完成' : `第 ${month+1} 月 / 共 8 週`}</span></div>
- {game.phase === 'lobby' && <section className="panel"><h2>城市已就位</h2><p>這是單機輪流模式，關主也能切換操作各城，沒有私密權限。請各城依序完成自己的回合。</p><div className="city-cards">{game.cities.map((v,i) => <article key={i}><span className="seal">{String.fromCharCode(65+i)}</span><h3>{v.name}</h3><p>8 箱糧食 · 三塊農田</p><span>準備就緒</span></article>)}</div><button className="primary" onClick={() => run(() => start(game))}>關主：開始第一週 →</button></section>}
- {game.phase === 'actions' && c && <><div className="week-strip">{Array.from({length:8},(_,i)=><span key={i} className={i+1 === game.week ? 'current' : i+1 < game.week ? 'past' : ''}>{i+1}<small>週</small></span>)}</div><div className="event"><span>本週告示</span><strong>{eventFor(game.week)?.title || '風調雨順'}</strong>{eventFor(game.week)?.description || '本週無特殊事件，正是耕耘與規劃的好時機。'}</div><div className="city-tabs">{game.cities.map((v,i) => <button key={i} className={i === city ? 'selected' : ''} onClick={() => { setCity(i); setBoxes(6); }}>{v.name} <small>{v.submitted ? '已提交 ✓' : '經營中'}</small></button>)}</div><div className="dashboard"><section><div className="stats"><div>糧倉庫存<strong>{c.stock}<small> 箱</small></strong></div><div>剩餘行動<strong>{c.remaining}<small> 次</small></strong></div><div>本週收成<strong>{c.harvest}<small> 箱</small></strong></div></div><div className="panel farm"><div className="section-top"><h2>{c.name} · 城郊農田</h2><span>照料後，下週自動收成 {C.harvestBoxes} 箱</span></div><Village/><div className="fields">{c.fields.map((f,i) => <div key={i} className={`field ${f.state}`}><span className="sprouts">{f.state === 'empty' ? '▱ ▱ ▱' : f.state === 'tilled' ? '⌁ ⌁ ⌁' : '♧ ♧ ♧'}</span><h3>{String.fromCharCode(65+i)} 田</h3><p>{f.state === 'empty' ? '空地 · 等待播種' : f.state === 'tilled' ? (canCare(f,game.week) ? '已播種 · 可以照料' : `已播種 · 第 ${(f.plantedWeek ?? game.week) + C.careDelayWeeks} 週可照料`) : `照料完成 · 第 ${f.readyWeek} 週收成`}</p>{f.state !== 'ready' && <button disabled={c.submitted || c.remaining === 0 || (f.state === 'tilled' && !canCare(f,game.week))} onClick={() => run(() => action(game,city,f.state === 'empty' ? 'till' : 'care',i))}>{f.state === 'empty' ? '播種' : '照料'} · 1 行動</button>}</div>)}</div></div><div className="panel logs"><h3>本週行動紀錄</h3>{c.logs.length ? c.logs.map((l,i)=><span key={i}>{i+1}. {l}</span>) : <p>尚未採取行動，先想想這週的安排。</p>}</div></section><aside><section className="panel"><div className="eyebrow">本月糧務</div><h2>{monthTotal(c,month)} <small>/ {C.monthlyTargets[month]} 箱</small></h2><progress value={monthTotal(c,month)} max={C.monthlyTargets[month]}/><p>尚欠 {Math.max(0,C.monthlyTargets[month]-monthTotal(c,month))} 箱 · 含本週剩 {4-(game.week-1)%4} 週</p></section><section className="panel"><h3>市集採買</h3><p>立即 +{eventFor(game.week)?.purchaseBoxes ?? C.purchaseBoxes} 箱，消耗一次行動。</p><button disabled={c.submitted || c.remaining === 0 || c.purchases >= C.purchaseLimit} onClick={() => run(() => action(game,city,'buy'))}>採買糧食 · {c.purchases}/{C.purchaseLimit}</button></section><section className="panel delivery"><h3>本週交付</h3><p>基本應交 {C.weeklyDelivery} 箱，可提前超額交付。</p>{c.submitted ? <><strong>已鎖定 {c.delivery} 箱</strong><p>請切換至下一座城市，等候關主揭曉。</p></> : <><label>交付箱數<input type="number" min={0} max={c.stock} step={1} value={boxes} onChange={e => setBoxes(Number(e.target.value))}/></label><p>交付後庫存 {Math.max(0,c.stock-boxes)} 箱 · 缺交 {Math.max(0,6-boxes)} 箱</p><button className="primary" onClick={() => { if (Number.isInteger(boxes) && boxes >= 0 && boxes <= c.stock && !confirm(`提交 ${boxes} 箱？剩餘 ${c.remaining} 次行動將放棄，提交後無法修改。`)) return; run(() => submit(game,city,boxes)); }}>確認並鎖定交付</button></>}</section></aside></div><div className="host-bar"><div><strong>關主控場</strong><span>{game.cities.filter(v=>v.submitted).length} / {game.cities.length} 城已提交</span></div><button className="primary" disabled={!game.cities.every(v=>v.submitted)} onClick={() => run(() => reveal(game))}>公開本週結果 →</button></div></>}
- {(game.phase === 'reveal' || game.phase === 'final') && <><section className="panel"><div className="section-top"><h2>{game.phase === 'final' ? '城市總排名' : game.week % 4 === 0 ? `第 ${month+1} 月小結` : '本週城市週報'}</h2><span>測試版規則 · 配分尚待校準</span></div><div className="table-wrap"><table><thead><tr><th>城市</th>{game.phase === 'final' ? <><th>月目標 /35</th><th>超額 /25</th><th>儲備產能 /25</th><th>韌性 /15</th><th>總分</th></> : <><th>收成</th><th>交付</th><th>缺交</th><th>剩餘庫存</th><th>本月交付 / 目標</th></>}</tr></thead><tbody>{[...game.cities].sort((a,b)=>game.phase === 'final' ? score(b).total-score(a).total : 0).map((v,i)=><tr key={v.name+i}><th>{game.phase === 'final' && `${i+1}. `}{v.name}</th>{game.phase === 'final' ? <>{(['delivery','growth','reserve','resilience','total'] as const).map(k=><td key={k}>{score(v)[k].toFixed(1)}</td>)}</> : <><td>{v.harvest}</td><td>{v.delivery}</td><td>{Math.max(0,6-v.delivery)}</td><td>{v.stock}</td><td>{monthTotal(v,month)} / {C.monthlyTargets[month]}{game.week%4===0 && (monthTotal(v,month)>=C.monthlyTargets[month] ? ' ✓ 達標' : ' 未達標')}</td></>}</tr>)}</tbody></table></div></section><section className="panel"><h2>{game.phase === 'final' ? '八週策略軌跡' : '已公開決策'}</h2>{game.cities.map((v,i)=><details key={i} open={game.phase === 'reveal'}><summary>{v.name} · 累計交付 {v.reports.reduce((a,r)=>a+r.delivered,0)} 箱</summary>{v.reports.filter(r=>game.phase === 'final' || r.week===game.week).map(r=><p key={r.week}>第 {r.week} 週｜{r.logs.join('、') || '未使用行動'}｜收成 {r.harvest}、交付 {r.delivered}、缺交 {r.shortage}、庫存 {r.stock}</p>)}</details>)}</section>{game.phase === 'final' ? <div className="notice">復盤提示：哪一週的投入帶來了下一週的收成？短期採買是否擠壓了長期產能？<br/>本版未提供城主風格鑑定、臨時訂單、圖卡匯出與多人同步。</div> : <div className="host-bar"><span>結果已保存，由關主手動推進。</span><button className="primary" onClick={() => { if(confirm(game.week===8 ? '結束八週並進入總結？' : '確認進入下一週？')) { run(()=>advance(game)); setCity(0); setBoxes(6); } }}>{game.week===8 ? '查看最終結算' : `進入第 ${game.week+1} 週`} →</button></div>}</>}
- </main>}
- <footer><span>糧戰：雙城經營戰</span><span>耕耘有時，經營有道。 <b>✦</b> 本機測試版</span></footer></>;
+import { useState } from "react";
+import { createRoot } from "react-dom/client";
+import { gameConfig as C } from "./gameConfig";
+import {
+  type Game,
+  createGame,
+  start,
+  action,
+  submit,
+  reveal,
+  advance,
+  chooseEvent,
+  chooseOrder,
+  setPaused,
+  reopen,
+} from "./gameEngine";
+import type { Command, Session } from "./protocol";
+import { Scene } from "./Scene";
+import { WeekHeader, CityBoard, HostControls, Published } from "./GamePanels";
+import { OnlineGame } from "./OnlineGame";
+import { apiAddress, initialApi, request } from "./online";
+import "./style.css";
+import "./v2.css";
+const KEY = "grain-war-v1",
+  SESSION = "grain-room-session";
+type Save = { game: Game; snapshot?: Game };
+function load(): Save | null {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) || "null"),
+      saved = raw?.game ? raw : { game: raw };
+    const g = saved.game;
+    if (
+      g?.version !== 1 ||
+      !Array.isArray(g.cities) ||
+      g.cities.length < 2 ||
+      g.cities.length > 6
+    )
+      return null;
+    for (const c of g.cities) {
+      if (!Array.isArray(c.fields) || !Array.isArray(c.reports)) return null;
+      for (const f of c.fields)
+        if (f.state === "tilled" && f.plantedWeek === undefined)
+          f.plantedWeek = g.week;
+    }
+    return saved;
+  } catch {
+    return null;
+  }
 }
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
+function oldSession(): { api: string; session: Session } | null {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION) || "null");
+    return s?.session?.token && s?.api ? s : null;
+  } catch {
+    return null;
+  }
+}
+function App() {
+  const [saved, setSaved] = useState<Save | null>(load),
+    [page, setPage] = useState("home"),
+    [count, setCount] = useState(2),
+    [names, setNames] = useState([...C.cityNames]),
+    [city, setCity] = useState(0),
+    [error, setError] = useState(""),
+    [step, setStep] = useState(0),
+    [mode, setMode] = useState<"local" | "online">("local"),
+    [api, setApi] = useState(initialApi),
+    [connection, setConnection] = useState(oldSession),
+    [code, setCode] = useState(""),
+    [recovery, setRecovery] = useState(""),
+    [lobby, setLobby] = useState<{
+      code: string;
+      cities: { name: string; joined: boolean }[];
+    } | null>(null),
+    [busy, setBusy] = useState(false);
+  const game = saved?.game;
+  const nav = (p: string) => {
+    setPage(p);
+    setError("");
+  };
+  const persist = (value: Save) => {
+    setSaved(value);
+    try {
+      localStorage.setItem(KEY, JSON.stringify(value));
+      setError("");
+    } catch {
+      setError("無法保存本機資料，請勿關閉此頁。");
+    }
+  };
+  const localCommand = (cmd: Command) => {
+    if (!game) return;
+    try {
+      let g = game,
+        snapshot = saved?.snapshot;
+      switch (cmd.type) {
+        case "start":
+          g = start(g);
+          snapshot = structuredClone(g);
+          break;
+        case "action":
+          g = action(g, city, cmd.kind, cmd.field);
+          break;
+        case "submit":
+          g = submit(g, city, cmd.boxes, cmd.orderBoxes);
+          break;
+        case "event":
+          g = chooseEvent(g, city, cmd.choice);
+          break;
+        case "order":
+          g = chooseOrder(g, city, cmd.choice);
+          break;
+        case "reveal":
+          g = reveal(g);
+          break;
+        case "advance":
+          g = advance(g);
+          if (g.phase === "actions") snapshot = structuredClone(g);
+          setCity(0);
+          break;
+        case "pause":
+          g = setPaused(g, true);
+          break;
+        case "resume":
+          g = setPaused(g, false);
+          break;
+        case "reopen":
+          if (!snapshot) throw Error("舊存檔沒有本週快照，下一週起即可重開");
+          g = reopen(g, snapshot);
+          break;
+      }
+      persist({ game: g, snapshot });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const connected = (address: string, session: Session) => {
+    const c = { api: address, session };
+    setConnection(c);
+    nav("online");
+    try {
+      localStorage.setItem(SESSION, JSON.stringify(c));
+      localStorage.setItem("grain-api", address);
+    } catch {
+      setError(
+        "此瀏覽器無法保存操作憑證，請展開房間內的私人恢復憑證並自行保存。",
+      );
+    }
+  };
+  const network = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError("");
+    try {
+      await fn();
+    } catch (e) {
+      setError(`連線未完成：${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const lessons = [
+    [
+      "八週，一座城的遠見",
+      "全程八週，每四週一個月。每城起始 8 箱糧食、三塊完全相同的田。第一月目標 32 箱，第二月 44 箱。",
+    ],
+    [
+      "四次行動，如何選擇？",
+      "每週通常四次行動，農務與採買共用。每次採買兩箱，每週最多四次。播種後最早下一週才能照料，再下一週自動收成七箱。",
+    ],
+    [
+      "事件中的取捨",
+      "第 3 週雨天只有三次行動；第 5 週可派人助鄰，以一次行動換三箱。第 6 週採買三箱，第 7 週五次行動。事件都在週初收成之後生效。",
+    ],
+    [
+      "交付與臨時訂單",
+      "每週基本交六箱，可超額、不足不淘汰。第 4、7 週有本週到期的臨時訂單，先接單或婉拒；訂單與月目標分帳，同一箱不能重複使用。",
+    ],
+    [
+      "提交、揭曉與關主控場",
+      "各城提交後鎖定。關主須等全部提交才可揭曉，再手動推進。經營中可暫停，或還原所有城市至本週起點；已公開週別不可重開。多人模式揭曉前看不到別城策略。",
+    ],
+    [
+      "看見團隊的經營風格",
+      "八週後提供暫行配分、趨勢、主副風格與可下載圖卡。以本場團隊決策為證據，觀察不足就明示，不是個人人格或績效診斷。",
+    ],
+  ];
+  return (
+    <>
+      <header>
+        <a
+          className="brand"
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            nav("home");
+          }}
+        >
+          <span className="seal">糧</span>
+          <span>
+            糧戰 <small>雙城經營戰</small>
+          </span>
+        </a>
+        <nav>
+          <button onClick={() => nav("home")}>首頁</button>
+          <button onClick={() => nav("rules")}>規則教學</button>
+          {game && <button onClick={() => nav("play")}>單機存檔</button>}
+          {connection && (
+            <button onClick={() => nav("online")}>返回房間</button>
+          )}
+          <span className="badge">V2 · 共築盛世</span>
+        </nav>
+      </header>
+      {error && (
+        <div className="error" role="alert">
+          {error}
+          <button onClick={() => setError("")}>關閉</button>
+        </div>
+      )}
+      {page === "home" && (
+        <main>
+          <section className="hero">
+            <div>
+              <div className="eyebrow">八週經營 · 一城遠見</div>
+              <h1>
+                一田一策，
+                <br />
+                養出你的<span>盛世。</span>
+              </h1>
+              <p>
+                山水之間，一座城正等著你的決策。
+                <br />
+                耕耘、交付、應變，與友城共寫八週的故事。
+              </p>
+              <div className="buttons">
+                <button className="primary" onClick={() => nav("setup")}>
+                  開啟新戰局 ↗
+                </button>
+                <button onClick={() => nav("join")}>加入多人房間 →</button>
+              </div>
+              <div className="hero-meta">
+                2–6 座城市 <b>·</b> 八週策略經營 <b>·</b> 單機與多人模式
+              </div>
+            </div>
+            <div className="hero-art">
+              <Scene />
+            </div>
+          </section>
+          <section className="features">
+            {[
+              [
+                "壹",
+                "耕耘長遠",
+                "播種、照料與收成，讓每次投入在村莊中留下痕跡。",
+              ],
+              ["貳", "共度風雨", "共通事件與限時訂單，考驗你的判斷與承諾。"],
+              [
+                "參",
+                "留下城誌",
+                "以八週決策看見團隊風格，保存專屬的城主圖卡。",
+              ],
+            ].map((a) => (
+              <article key={a[0]}>
+                <span>{a[0]}</span>
+                <div>
+                  <h3>{a[1]}</h3>
+                  <p>{a[2]}</p>
+                </div>
+              </article>
+            ))}
+          </section>
+          <div className="notice">
+            單機模式不需伺服器。多人模式需已部署的房間服務；GitHub Pages
+            僅提供前端，無法自行承載多人房間。
+          </div>
+        </main>
+      )}
+      {page === "rules" && (
+        <main className="narrow">
+          <div className="eyebrow">
+            遊戲指南 / {step + 1} OF {lessons.length}
+          </div>
+          <h1 className="page-title">從一粒種子，讀懂經營。</h1>
+          <section className="panel tutorial">
+            <span className="chapter">0{step + 1}</span>
+            <h2>{lessons[step][0]}</h2>
+            <p>{lessons[step][1]}</p>
+            <div className="dots">
+              {lessons.map((_, i) => (
+                <button
+                  key={i}
+                  aria-label={`教學第 ${i + 1} 步`}
+                  className={step === i ? "selected" : ""}
+                  onClick={() => setStep(i)}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+            <div className="buttons">
+              <button disabled={step === 0} onClick={() => setStep(step - 1)}>
+                上一步
+              </button>
+              {step < lessons.length - 1 ? (
+                <button className="primary" onClick={() => setStep(step + 1)}>
+                  下一步 →
+                </button>
+              ) : (
+                <button className="primary" onClick={() => nav("setup")}>
+                  開始建立戰局
+                </button>
+              )}
+            </div>
+          </section>
+        </main>
+      )}
+      {page === "setup" && (
+        <main className="narrow">
+          <div className="eyebrow">關主設定</div>
+          <h1 className="page-title">邀幾座城，一同開局。</h1>
+          <section className="panel">
+            <div className="mode-toggle">
+              <button
+                className={mode === "local" ? "selected" : ""}
+                onClick={() => setMode("local")}
+              >
+                同機輪流
+              </button>
+              <button
+                className={mode === "online" ? "selected" : ""}
+                onClick={() => setMode("online")}
+              >
+                多人連線
+              </button>
+            </div>
+            <p>
+              {mode === "local"
+                ? "所有城市共用本裝置，資料保存於瀏覽器。"
+                : "每城各用自己的裝置。關主僅能控場，無法代替城市操作或偷看未公開資料。"}
+            </p>
+            {mode === "online" && (
+              <label>
+                房間伺服器網址
+                <input
+                  type="url"
+                  value={api}
+                  onChange={(e) => setApi(e.target.value)}
+                  placeholder="https://你的房間服務網址"
+                />
+              </label>
+            )}
+            <h2>參賽城市</h2>
+            <div className="counts">
+              {[2, 3, 4, 5, 6].map((n) => (
+                <button
+                  key={n}
+                  className={n === count ? "selected" : ""}
+                  onClick={() => setCount(n)}
+                >
+                  {n} 城
+                </button>
+              ))}
+            </div>
+            <div className="name-grid">
+              {names.slice(0, count).map((name, i) => (
+                <label key={i}>
+                  {String.fromCharCode(65 + i)} 城名稱
+                  <input
+                    value={name}
+                    maxLength={12}
+                    onChange={(e) =>
+                      setNames(
+                        names.map((v, j) => (j === i ? e.target.value : v)),
+                      )
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="notice">
+              固定教學事件與訂單 · 測試版配分
+              <br />
+              起始八箱／三田／通常每週四次行動／基本交付六箱
+            </div>
+            <button
+              disabled={busy}
+              className="primary"
+              onClick={() => {
+                if (mode === "local") {
+                  if (game && !confirm("建立新局會取代單機存檔，確定？"))
+                    return;
+                  persist({ game: createGame(count, names) });
+                  setCity(0);
+                  nav("play");
+                } else
+                  network(async () => {
+                    const address = apiAddress(api),
+                      result = await request(address, "", {
+                        body: { count, names },
+                      });
+                    connected(address, result);
+                  });
+              }}
+            >
+              建立戰局 →
+            </button>
+          </section>
+        </main>
+      )}
+      {page === "join" && (
+        <main className="narrow">
+          <div className="eyebrow">多人房間</div>
+          <h1 className="page-title">帶著你的城，赴一場約。</h1>
+          <section className="panel">
+            <label>
+              房間伺服器網址
+              <input
+                type="url"
+                value={api}
+                onChange={(e) => {
+                  setApi(e.target.value);
+                  setLobby(null);
+                }}
+              />
+            </label>
+            <label>
+              六位房間碼
+              <input
+                value={code}
+                maxLength={6}
+                inputMode="numeric"
+                onChange={(e) => {
+                  setCode(e.target.value.replace(/\D/g, ""));
+                  setLobby(null);
+                }}
+              />
+            </label>
+            <div className="buttons">
+              <button
+                disabled={busy || code.length !== 6}
+                onClick={() =>
+                  network(async () => {
+                    setLobby(await request(apiAddress(api), `/${code}/lobby`));
+                  })
+                }
+              >
+                查看可加入城市
+              </button>
+            </div>
+            {lobby && (
+              <div className="city-cards">
+                {lobby.cities.map((c, i) => (
+                  <article key={i}>
+                    <h3>{c.name}</h3>
+                    <button
+                      disabled={busy || c.joined}
+                      onClick={() =>
+                        network(async () => {
+                          const address = apiAddress(api),
+                            result = await request(
+                              address,
+                              `/${lobby.code}/join`,
+                              { body: { index: i } },
+                            );
+                          connected(address, result);
+                        })
+                      }
+                    >
+                      {c.joined ? "已有人加入" : "以此城加入"}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
+            <details>
+              <summary>用私人憑證恢復操作權</summary>
+              <p>
+                恢復會中止此憑證在其他頁面的操作權。不可用房間碼代替私人憑證。
+              </p>
+              <label>
+                私人恢復憑證
+                <input
+                  type="password"
+                  value={recovery}
+                  onChange={(e) => setRecovery(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+              <button
+                disabled={busy || code.length !== 6 || recovery.length !== 64}
+                onClick={() =>
+                  network(async () => {
+                    const address = apiAddress(api),
+                      data = await request(address, `/${code}/resume`, {
+                        body: {},
+                        token: recovery,
+                      });
+                    connected(address, {
+                      code,
+                      token: recovery,
+                      role: data.role,
+                    });
+                    setRecovery("");
+                  })
+                }
+              >
+                恢復我的操作權
+              </button>
+            </details>
+          </section>
+        </main>
+      )}
+      {page === "online" && connection && (
+        <OnlineGame
+          api={connection.api}
+          session={connection.session}
+          leave={() => nav("home")}
+        />
+      )}
+      {page === "play" && game && (
+        <main>
+          <div className="room-ribbon">
+            <span>單機輪流 · 本機存檔</span>
+            <span>城市資料不具私密隔離</span>
+          </div>
+          <WeekHeader
+            week={game.week}
+            phase={game.phase}
+            paused={!!game.paused}
+          />
+          {game.phase === "lobby" && (
+            <section className="panel">
+              <h2>城市已就位</h2>
+              <div className="city-cards">
+                {game.cities.map((c, i) => (
+                  <article key={i}>
+                    <span className="seal">{String.fromCharCode(65 + i)}</span>
+                    <h3>{c.name}</h3>
+                    <p>八箱糧食 · 三塊田 · 準備就緒</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+          {game.phase === "actions" && (
+            <>
+              <div className="city-tabs">
+                {game.cities.map((c, i) => (
+                  <button
+                    key={i}
+                    className={city === i ? "selected" : ""}
+                    onClick={() => setCity(i)}
+                  >
+                    {c.name}{" "}
+                    <small>{c.submitted ? "已提交 ✓" : "經營中"}</small>
+                  </button>
+                ))}
+              </div>
+              <CityBoard
+                city={game.cities[city]}
+                week={game.week}
+                identity={String(city)}
+                disabled={!!game.paused}
+                send={localCommand}
+              />
+            </>
+          )}
+          <HostControls
+            phase={game.phase}
+            paused={!!game.paused}
+            allSubmitted={game.cities.every((c) => c.submitted)}
+            allJoined
+            disabled={false}
+            canReopen={!!saved?.snapshot}
+            send={localCommand}
+          />
+          {(game.phase === "reveal" || game.phase === "final") && (
+            <Published
+              cities={game.cities}
+              week={game.week}
+              final={game.phase === "final"}
+            />
+          )}
+        </main>
+      )}
+      <footer>
+        <span>糧戰：雙城經營戰</span>
+        <span>耕耘有時，經營有道。 ✦ V2</span>
+      </footer>
+    </>
+  );
+}
+createRoot(document.getElementById("root")!).render(<App />);
