@@ -63,3 +63,33 @@ npm run preview -- --port 4173
 - `npm test`：14 個引擎測試通過。
 - `npm run build`：TypeScript 與正式建置通過。
 - 使用系統 Chromium + Playwright 實際操作：六城開局、逐步教學、八週逐城開墾／照料／提交、月結、最終排名、第一週提交後重新整理恢復、390px 手機版無橫向溢位；無瀏覽器執行錯誤。此為本次實際執行的煙霧驗證，未將臨時瀏覽器工具加入專案依賴。
+
+## GitHub Pages 預覽／部署
+
+部署不會改動儲存庫的公開／私有狀態。請先確認 GitHub 帳號方案支援私有儲存庫的 Pages，並確認可接受網站對外公開。**儲存庫私有並不代表 Pages 網站私有**；本原型不可放入敏感資料。
+
+1. 在 GitHub 開啟 `shmash4545/grain-war-game` → **Settings → Pages**。
+2. 在 **Build and deployment → Source** 選 **GitHub Actions**。如果因方案無法啟用，請升級適用方案或另選支援私有來源的託管平台；不必將儲存庫改成公開。
+3. 若 Actions 被停用，至 **Settings → Actions → General** 允許本流程使用的 GitHub 官方 Actions。若組織政策限制 Actions 或部署，需由管理員允許。
+4. 合併部署 PR 到 `main` 後，至 **Actions → Validate and deploy GitHub Pages** 查看建置與部署結果。也可選 `main` 後使用 **Run workflow** 手動部署。
+5. 如 `github-pages` 環境要求核准，在該次執行中批准部署，並確認 **Settings → Environments → github-pages** 允許 `main` 部署。
+6. 成功後在 **Settings → Pages → Visit site** 或 Actions 的 deployment URL 開啟網站。預期網址為 `https://shmash4545.github.io/grain-war-game/`；請以 GitHub 顯示的 URL 為準，設定完成前該網址可能不存在。
+
+PR 只執行測試與建置；**不會替每個 PR 建立預覽網址**。正式 Pages 部署只在 `main` 的 push 或手動執行時進行，且只授予部署工作 `pages: write`、`id-token: write`。不需要新增 token 或其他 secrets。
+
+`vite.config.ts` 預設 base 為 `/grain-war-game/`。如使用不同名稱的儲存庫，需同步更新 base 與 workflow 的 `BASE_PATH`。如設定自訂網域，改為 `/`。此版無前端深層路由，不需要 SPA 404 回退設定。
+
+加入 base 後，開發網址為 `http://localhost:5173/grain-war-game/`，正式建置本機預覽則為 `http://localhost:4173/grain-war-game/`。舊版根路徑的啟動說明請加上此子路徑。
+
+### Private 儲存庫的限制
+
+- 一般 GitHub Free／Free for organizations 的 Pages 適用於公開儲存庫；私有儲存庫通常需要 GitHub Pro、Team 或 Enterprise 等支援方案。
+- 一般私有來源的 Pages 網站仍可公開瀏覽。網站存取控制是額外企業功能，需符合 GitHub Enterprise Cloud 等條件；不應假設登入 GitHub 才能進入。
+- 私有儲存庫執行 Actions 可能消耗帳號方案內的執行分鐘數／儲存配額。
+- GitHub Pages 僅提供靜態檔案。本版 localStorage 可正常使用，但不同網址的存檔互不共用；未來多人同步需要另外的後端服務。
+- 方案、用量及組織限制可能調整，請以帳號的 Settings → Pages 與 GitHub 官方文件為準。
+
+官方說明：
+- https://docs.github.com/en/pages/getting-started-with-github-pages/about-github-pages
+- https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages
+- https://docs.github.com/en/pages/getting-started-with-github-pages/changing-the-visibility-of-your-github-pages-site
