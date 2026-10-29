@@ -1,0 +1,16 @@
+# Review pricing before creating this Blueprint: the persistent disk requires a paid service.
+services:
+  - type: web
+    name: grain-war-rooms
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: ALLOWED_ORIGINS
+        value: https://shmash4545.github.io
+      - key: DATA_FILE
+        value: /var/data/rooms.sqlite
+    disk:
+      name: grain-war-data
+      mountPath: /var/data
+      sizeGB: 1
